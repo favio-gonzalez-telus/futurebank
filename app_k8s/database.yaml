@@ -24,6 +24,10 @@ spec:
       labels:
         app: database
     spec:
+      securityContext:
+        runAsUser: 54321    # Oracle User 
+        runAsGroup: 54321   # Oinstall group
+        fsGroup: 54321      # Oinstall group
       volumes:
       - name: db-init-vol
         configMap:
