@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+spec:
+  type: ClusterIP # Servicio Privado
+  selector:
+    app: database
+  ports:
+  - port: 1521
+    targetPort: 1521
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      volumes:
+      - name: db-init-vol
+        configMap:
+          name: db-init-config
+      - name: db-oradata-vol
+        persistentVolumeClaim:
+          claimName: oracle-pvc
+      containers:
+      - name: database
+        image: gvenzl/oracle-xe:21.3.0
+        env:
+        - name: ORACLE_PASSWORD
+          value: mypass
+        - name: APP_USER
+          value: appuser
+        - name: APP_USER_PASSWORD
+          value: myapppass
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 1521
+        volumeMounts:
+        - name: db-init-vol
+          mountPath: /container-entrypoint-initdb.d
+        - name: db-oradata-vol
+          mountPath: /opt/oracle/oradata
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oracle-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-config
+data:
+  init.sql: |
+    ALTER SESSION SET CONTAINER=XEPDB1;
+
+    -- PERSON CREATION
+    CREATE TABLE APPUSER.CUSTOMER (
+      ID NUMBER,
+      EMAIL VARCHAR2(100) UNIQUE NOT NULL,
+      PASSWORD VARCHAR2(1000) NOT NULL,
+      FIRST_NAME VARCHAR2(100) NOT NULL,
+      LAST_NAME VARCHAR2(100) NOT NULL,
+      TOKEN_PERSON VARCHAR2(1000) NOT NULL,
+      ADD_DATE DATE DEFAULT SYSDATE,
+      MOD_DATE DATE,
+      PRIMARY KEY(ID)
+    );
+
+    --SEQUENCE PERSON
+    CREATE SEQUENCE APPUSER.SQ_CUSTOMER NOCACHE;
+
+    --TABLE CATEGORY
+    CREATE TABLE APPUSER.CATEGORY (
+      ID NUMBER,
+      VALUE VARCHAR2(100) NOT NULL,
+      PRIMARY KEY(ID)
+    );
+
+    --SEQUENCE CATEGORY
+    CREATE SEQUENCE APPUSER.SQ_CATEGORY NOCACHE;
+
+    --TABLE CATEGORY
+    CREATE TABLE APPUSER.CURRENCY (
+      ID NUMBER,
+      NAME VARCHAR2(100) NOT NULL,
+        CONVERSION BINARY_FLOAT NOT NULL,
+      PRIMARY KEY(ID)
+    );
+
+    --SEQUENCE CATEGORY
+    CREATE SEQUENCE APPUSER.SQ_CURRENCY NOCACHE;
+
+    --TABLE ACCOUNT
+    CREATE TABLE APPUSER.ACCOUNT (
+      ID NUMBER,
+        CUSTOMER_ID NUMBER,
+        CURRENCY_ID NUMBER,
+      ACCOUNT_MONEY BINARY_FLOAT NOT NULL,
+      ACCOUNT_NAME VARCHAR2(100) NOT NULL,
+      ACCOUNT_NUMBER VARCHAR2(1000) NOT NULL,
+      ADD_DATE DATE DEFAULT SYSDATE,
+      MOD_DATE DATE,
+      PRIMARY KEY (ID),
+      FOREIGN KEY(CUSTOMER_ID) REFERENCES APPUSER.CUSTOMER(ID),
+      FOREIGN KEY(CURRENCY_ID) REFERENCES APPUSER.CURRENCY(ID)
+    );
+
+    --SEQUENCE ACCOUNT
+    CREATE SEQUENCE APPUSER.SQ_ACCOUNT NOCACHE;
+
+    --TABLE TRANSACTION
+    CREATE TABLE APPUSER.BANK_TRANSACTION (
+      ID NUMBER,
+      ACCOUNT_ID NUMBER NOT NULL,
+        CURRENCY_ID NUMBER NOT NULL,
+        CATEGORY_ID NUMBER NOT NULL,
+      TRANSACTION_TYPE VARCHAR(100) NOT NULL,
+      TRANSACTION_AMOUNT BINARY_FLOAT NOT NULL,
+      ADD_DATE DATE DEFAULT SYSDATE,
+      PRIMARY KEY(ID),
+      FOREIGN KEY(ACCOUNT_ID) REFERENCES APPUSER.ACCOUNT(ID),
+      FOREIGN KEY(CURRENCY_ID) REFERENCES APPUSER.CURRENCY(ID),
+      FOREIGN KEY(CATEGORY_ID) REFERENCES APPUSER.CATEGORY(ID)
+    );
+
+    --SEQUENCE TRANSACTION
+    CREATE SEQUENCE APPUSER.SQ_TRANSACTION NOCACHE;
+
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Services');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Transfer to Another Account');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Credit Card');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Food');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Entertaiment');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Loans');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Salary');
+    INSERT INTO APPUSER.CATEGORY (ID, VALUE) VALUES (APPUSER.SQ_CATEGORY.NEXTVAL, 'Sales');
+    INSERT INTO APPUSER.CURRENCY (ID, NAME, CONVERSION) VALUES (2, 'USD', 7.76);
+    INSERT INTO APPUSER.CURRENCY (ID, NAME, CONVERSION) VALUES (1, 'GTQ', 0.13);
+
+    --FUNCTION API_TOKEN
+    CREATE OR REPLACE FUNCTION APPUSER.API_TOKEN(PSECRET VARCHAR2) RETURN VARCHAR2
+    IS
+      VRESULT VARCHAR2(4000);
+    BEGIN
+      SELECT UTL_RAW.CAST_TO_VARCHAR2(UTL_I18N.STRING_TO_RAW(STANDARD_HASH(PSECRET,'MD5'),'AL32UTF8')) INTO VRESULT FROM dual;
+      RETURN VRESULT;
+    END API_TOKEN;
+    /

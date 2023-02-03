@@ -12,3 +12,5 @@ docker run -d -p 1521:1521 `
 -v oracle-disk3:/opt/oracle/oradata `
 gvenzl/oracle-xe:21.3.0
 ```
+docker exec -it facf326a8e4d sqlplus sys/mypass@//localhost:1521/XEPDB1 as sysdba
+@/container-entrypoint-initdb.d/insert_data.sql
