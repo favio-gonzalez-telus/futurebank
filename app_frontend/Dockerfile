@@ -13,7 +13,7 @@ COPY . /opt/app
 
 WORKDIR /opt/app
 
-ENV VITE_APP_API_URL=http://localhost:8500
+ENV VITE_APP_API_URL=http://34.135.65.74:8500
 
 RUN npm install --legacy-peer-deps -y
 
@@ -21,7 +21,7 @@ RUN npm run build
 
 FROM node:18.9.0
 
-ENV VITE_APP_API_URL=http://localhost:8500
+ENV VITE_APP_API_URL=http://34.135.65.74:8500
 
 COPY --from=compilacion /opt/app/dist /opt/app/dist
 
